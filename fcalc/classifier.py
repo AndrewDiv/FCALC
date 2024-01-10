@@ -3,24 +3,31 @@ from . import binary_decision_functions
 import numpy as np
 
 class FcaClassifier:
-    """
-    A base class of support based FCA slassifiers.
+    '''
+    A base class of support based FCA slassifiers
  
-    Attributes:
-        context (list, numpy.ndarray): Features of objects with a known class labels.
-        labels (list, numpy.ndarray): Labels of the objects.
-        support (None, numpy.ndarray): Precomputed support or None.
-    """
-
+    Attributes
+    ----------
+    context : list, numpy.ndarray
+        Features of objects with a known class labels
+    labels : list, numpy.ndarray
+        Labels of the objects
+    support : None, numpy.ndarray
+        Precomputed support or None
+    '''
     def __init__(self, context, labels, support = None):
-        """
-        Initializes FcaClassifier object.
+        '''
+        Initializes FcaClassifier object
  
-        Parameters:
-            context (list, numpy.ndarray): Features of objects with a known class labels.
-            labels (list, numpy.ndarray): Labels of the objects.
-            support (None, numpy.ndarray): Precomputed support or None.
-        """
+        Parameters
+        ----------
+        context : list, numpy.ndarray
+            Features of objects with a known class labels
+        labels : list, numpy.ndarray
+            Labels of the objects
+        support : None, numpy.ndarray
+            Precomputed support or None
+        '''
         if not isinstance(context, (list, np.ndarray)):
             raise TypeError('Context should be of type list or numpy.ndarray')
         
@@ -40,40 +47,53 @@ class FcaClassifier:
             self.support = support
 
 class BinarizedBinaryClassifier(FcaClassifier):
-    """
-    FCA support based classifier for binary classification on binarized data.
+    '''
+    FCA support based classifier for binary classification on binarized data
  
-    Attributes:
-        context (list, numpy.ndarray): Binarized features of objects with a known class labels.
-        labels (list, numpy.ndarray): Labels of the objects.
-        support (None, numpy.ndarray): Precomputed support or None.
-        method (str): Name of classification method.
-        alpha (float): Hyperparameter of the method.
-    """
-
+    Attributes
+    ----------
+    context : list, numpy.ndarray
+        Binarized features of objects with a known class labels
+    labels : list, numpy.ndarray
+        Labels of the objects
+    support : None, numpy.ndarray
+        Precomputed support or None
+    method : str
+        Name of classification method
+    alpha : float 
+        Hyperparameter of the method
+    '''
     def __init__(self, context, labels, support=None, method="standard", alpha=0.):
-        """
-        Initializes BinarizedBinaryClassifier object.
+        '''
+        Initializes BinarizedBinaryClassifier object
  
-        Parameters:
-            context (list, numpy.ndarray): Features of objects with a known class labels.
-            labels (list, numpy.ndarray): Labels of the objects.
-            support (None, numpy.ndarray): Precomputed support or None.
-            method (str): Name of classification method.
-            alpha (float): Hyperparameter of the method.
-        """        
+        Parameters
+        ----------
+        context : list, numpy.ndarray: 
+            Features of objects with a known class labels
+        labels : list, numpy.ndarray 
+            Labels of the objects
+        support : None, numpy.ndarray
+            Precomputed support or None
+        method : str
+            Name of classification method
+        alpha : float
+            Hyperparameter of the method
+        '''        
         super().__init__(context, labels, support)
         self.context = self.context.astype(dtype=np.bool_)
         self.method = method
         self.alpha = alpha
 
     def compute_support(self, test):
-        """
-        Computes support for the given test objects.
+        '''
+        Computes support for the given test objects
  
-        Parameters:
-            test (list, numpy.ndarray): Test objects description (binarized).
-        """
+        Parameters
+        ----------
+        test : list, numpy.ndarray
+            Test objects description (binarized)
+        '''
         test = np.asarray(test, dtype=np.bool_)
         train_pos = self.context[self.labels == True]
         train_neg = self.context[self.labels == False]
@@ -101,12 +121,14 @@ class BinarizedBinaryClassifier(FcaClassifier):
                         np.array((negative_support, negative_counter))]
 
     def predict(self, test):
-        """
-        Predicts the class labels for the given test objects.
+        '''
+        Predicts the class labels for the given test objects
  
-        Parameters:
-            test (list, numpy.ndarray): Test objects description (binarized).
-        """
+        Parameters
+        ----------
+        test : list, numpy.ndarray
+            Test objects description (binarized)
+        '''
         if not self.support:
             self.compute_support(test)
         
@@ -129,30 +151,43 @@ class BinarizedBinaryClassifier(FcaClassifier):
                                                                               self.alpha)
 
 class PatternBinaryClassifier(FcaClassifier):
-    """
-    FCA support based classifier for binary classification using pattern structures.
+    '''
+    FCA support based classifier for binary classification using pattern structures
  
-    Attributes:
-        context (list, numpy.ndarray): Binarized features of objects with a known class labels.
-        labels (list, numpy.ndarray): Labels of the objects.
-        support (None, numpy.ndarray): Precomputed support or None.
-        categorical (list): list of indixes of columns with categorical features.
-        method (str): Name of classification method.
-        alpha (float): Hyperparameter of the method.
-    """
-
+    Attributes
+    ----------
+    context : list, numpy.ndarray
+        Binarized features of objects with a known class labels
+    labels : list, numpy.ndarray
+        Labels of the objects
+    support : None, numpy.ndarray
+        Precomputed support or None
+    categorical : list
+        list of indixes of columns with categorical features
+    method : str
+        Name of classification method
+    alpha : float
+        Hyperparameter of the method
+    '''
     def __init__(self, context, labels, support=None, categorical=None, method="standard", alpha=0.):
-        """
-        Initializes PatternBinaryClassifier object.
+        '''
+        Initializes PatternBinaryClassifier object
  
-        Parameters:
-            context (list, numpy.ndarray): Features of objects with a known class labels.
-            labels (list, numpy.ndarray): Labels of the objects.
-            support (None, numpy.ndarray): Precomputed support or None.
-            categorical (list): list of indixes of columns with categorical features.
-            method (str): Name of classification method.
-            alpha (float): Hyperparameter of the method.
-        """      
+        Parameters
+        ----------
+        context : list, numpy.ndarray
+            Binarized features of objects with a known class labels
+        labels : list, numpy.ndarray
+            Labels of the objects
+        support : None, numpy.ndarray
+            Precomputed support or None
+        categorical : list
+            list of indixes of columns with categorical features
+        method : str
+            Name of classification method
+        alpha : float
+            Hyperparameter of the method
+        '''      
 
         super().__init__(context, labels, support)
         self.method = method
@@ -163,12 +198,14 @@ class PatternBinaryClassifier(FcaClassifier):
             self.categorical = categorical
     
     def compute_support(self, test):
-        """
-        Computes support for the given test objects.
+        '''
+        Computes support for the given test objects
  
-        Parameters:
-            test (list, numpy.ndarray): Test objects description.
-        """
+        Parameters
+        ----------
+        test : list, numpy.ndarray
+            Test objects description
+        '''
 
         train_pos = self.context[self.labels == True]
         train_neg = self.context[self.labels == False]
@@ -232,12 +269,14 @@ class PatternBinaryClassifier(FcaClassifier):
                         np.array((negative_support, negative_counter))]
 
     def predict(self, test):
-        """
-        Predicts the class labels for the given test objects.
+        '''
+        Predicts the class labels for the given test objects
  
-        Parameters:
-            test (list, numpy.ndarray): Test objects description.
-        """
+        Parameters
+        ----------
+        test : list, numpy.ndarray
+            Test objects description
+        '''
 
         if not self.support:
             self.compute_support(test)

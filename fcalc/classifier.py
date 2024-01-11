@@ -330,12 +330,3 @@ class BinarizedClassifier(FcaClassifier):
 
     def predict(self, test):
         pass
-        # self.compute_support(test)
-        # self.predictions = np.zeros(len(test))
-
-        # if self.method == "standard":
-        #     for i in range(len(test)):
-        #         self.predictions[i] = decision_functions.standard_method(self.support[0][:,i], 
-        #                                                                  self.support[1][:,i], 
-        #                                                                  self.alpha)
-

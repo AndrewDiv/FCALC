@@ -1,5 +1,6 @@
 from . import patterns
 from . import binary_decision_functions
+from . import decision_functions 
 import numpy as np
 
 class FcaClassifier:
@@ -310,8 +311,8 @@ class BinarizedClassifier(FcaClassifier):
         self.alpha = alpha
 
     def compute_support(self, test):
+        
         for c in self.classes:
-
             train_pos = self.context[self.labels == c]
             train_neg = self.context[self.labels != c]
 
@@ -329,4 +330,31 @@ class BinarizedClassifier(FcaClassifier):
             self.support.append(np.array((positive_support, positive_counter)))
 
     def predict(self, test):
-        pass
+        '''
+        Predicts the class labels for the given test objects
+ 
+        Parameters
+        ----------
+        test : list, numpy.ndarray
+            Test objects description (binarized)
+        '''
+        if not self.support:
+            self.compute_support(test)
+        
+        self.predictions = np.zeros(len(test))
+
+        # if self.method == "standard":
+        #     for i in range(len(test)):
+        #         self.predictions[i] = binary_decision_functions.alpha_weak(self.support[0][:,i], 
+        #                                                                    self.support[1][:,i], 
+        #                                                                    self.alpha)
+        # elif self.method == "standard-support":
+        #     for i in range(len(test)):
+        #         self.predictions[i] = binary_decision_functions.alpha_weak_support(self.support[0][:,i], 
+        #                                                                            self.support[1][:,i], 
+        #                                                                            self.alpha)
+        # elif self.method == "ratio-support":
+        #     for i in range(len(test)):
+        #         self.predictions[i] = binary_decision_functions.ratio_support(self.support[0][:,i], 
+        #                                                                       self.support[1][:,i], 
+        #                                                                       self.alpha)

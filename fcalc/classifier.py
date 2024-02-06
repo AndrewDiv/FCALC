@@ -302,8 +302,44 @@ class PatternBinaryClassifier(FcaClassifier):
                                                                               self.alpha)
                         
 class BinarizedClassifier(FcaClassifier):
-    
+    '''
+    FCA support based classifier for classification of binarized data
+ 
+    Attributes
+    ----------
+    context : list, numpy.ndarray
+        Binarized features of objects with a known class labels
+    labels : list, numpy.ndarray
+        Labels of the objects
+    support : None, numpy.ndarray
+        Precomputed support or None
+    method : str
+        Name of classification method
+    alpha : float 
+        Hyperparameter of the method
+    classes : numpy.ndarray
+        Array of possible classes
+    class_lengths : numpy.ndarray
+        Array of sizes of each class
+    '''
+
     def __init__(self, context, labels, support=None, method="standard", alpha=0.):
+        '''
+        Initializes BinarizedClassifier object
+ 
+        Parameters
+        ----------
+        context : list, numpy.ndarray: 
+            Features of objects with a known class labels
+        labels : list, numpy.ndarray 
+            Labels of the objects
+        support : None, numpy.ndarray
+            Precomputed support or None
+        method : str
+            Name of classification method
+        alpha : float
+            Hyperparameter of the method
+        '''      
         super().__init__(context, labels, support)
         self.classes = np.unique(labels)
         self.class_lengths = np.array([len(self.context[self.labels == c]) for c in self.classes])
@@ -311,13 +347,20 @@ class BinarizedClassifier(FcaClassifier):
         self.alpha = alpha
 
     def compute_support(self, test):
-        
+        '''
+        Computes support for the given test objects
+ 
+        Parameters
+        ----------
+        test : list, numpy.ndarray
+            Test objects description (binarized)
+        '''
         for c in self.classes:
             train_pos = self.context[self.labels == c]
             train_neg = self.context[self.labels != c]
 
-            positive_support = np.empty(shape=(len(test), len(train_pos)))
-            positive_counter = np.empty(shape=(len(test), len(train_pos)))
+            positive_support = np.zeros(shape=(len(test), len(train_pos)))
+            positive_counter = np.zeros(shape=(len(test), len(train_pos)))
 
             for i in range(len(test)):
                 intsec_pos = test[i].reshape(1, -1) & train_pos
@@ -340,21 +383,134 @@ class BinarizedClassifier(FcaClassifier):
         '''
         if not self.support:
             self.compute_support(test)
-        
-        self.predictions = np.zeros(len(test))
 
-        # if self.method == "standard":
-        #     for i in range(len(test)):
-        #         self.predictions[i] = binary_decision_functions.alpha_weak(self.support[0][:,i], 
-        #                                                                    self.support[1][:,i], 
-        #                                                                    self.alpha)
-        # elif self.method == "standard-support":
-        #     for i in range(len(test)):
-        #         self.predictions[i] = binary_decision_functions.alpha_weak_support(self.support[0][:,i], 
-        #                                                                            self.support[1][:,i], 
-        #                                                                            self.alpha)
-        # elif self.method == "ratio-support":
-        #     for i in range(len(test)):
-        #         self.predictions[i] = binary_decision_functions.ratio_support(self.support[0][:,i], 
-        #                                                                       self.support[1][:,i], 
-        #                                                                       self.alpha)
+        if self.method == "standard":
+            self.predictions = decision_functions.alpha_weak(self.support, self.classes, 
+                                                             self.class_lengths, self.alpha)
+        elif self.method == "standard-support":
+            self.predictions = decision_functions.alpha_weak_support(self.support, self.classes, 
+                                                                     self.class_lengths, self.alpha)
+        elif self.method == "ratio-support":
+            self.predictions = decision_functions.ratio_support(self.support, self.classes, 
+                                                                self.class_lengths, self.alpha)
+
+class PatternClassifier(FcaClassifier):
+    '''
+    FCA support based classifier for classification using pattern structures
+ 
+    Attributes
+    ----------
+    context : list, numpy.ndarray
+        Binarized features of objects with a known class labels
+    labels : list, numpy.ndarray
+        Labels of the objects
+    support : None, numpy.ndarray
+        Precomputed support or None
+    categorical : list
+        list of indixes of columns with categorical features
+    method : str
+        Name of classification method
+    alpha : float
+        Hyperparameter of the method
+    '''
+    def __init__(self, context, labels, support=None, categorical=None, method="standard", alpha=0.):
+        '''
+        Initializes PatternBinaryClassifier object
+ 
+        Parameters
+        ----------
+        context : list, numpy.ndarray
+            Binarized features of objects with a known class labels
+        labels : list, numpy.ndarray
+            Labels of the objects
+        support : None, numpy.ndarray
+            Precomputed support or None
+        categorical : list
+            list of indixes of columns with categorical features
+        method : str
+            Name of classification method
+        alpha : float
+            Hyperparameter of the method
+        '''      
+
+        super().__init__(context, labels, support)
+        self.classes = np.unique(labels)
+        self.class_lengths = np.array([len(self.context[self.labels == c]) for c in self.classes])
+        self.method = method
+        self.alpha = alpha
+        if categorical is None:
+            self.categorical = []
+        else: 
+            self.categorical = categorical
+
+    def compute_support(self, test):
+        '''
+        Computes support for the given test objects
+ 
+        Parameters
+        ----------
+        test : list, numpy.ndarray
+            Test objects description
+        '''
+
+        for c in self.classes:
+            train_pos = self.context[self.labels == c]
+            train_neg = self.context[self.labels != c]
+
+            positive_support = np.zeros(shape=(len(test), len(train_pos)))
+            positive_counter = np.zeros(shape=(len(test), len(train_pos))) 
+
+            if len(self.categorical) == 0:
+                for i in range(len(test)):
+                    for j in range(len(train_pos)):
+                        intsec = patterns.IntervalPattern(test[i],train_pos[j])
+                        positive_support[i][j] = sum((~((intsec.low <= train_pos) * (train_pos <= intsec.high))).sum(axis=1) == 0)
+                        positive_counter[i][j] = sum((~((intsec.low <= train_neg) * (train_neg <= intsec.high))).sum(axis=1) == 0)
+
+            elif len(self.categorical) == test.shape[1]:
+                for i in range(len(test)):
+                    for j in range(len(train_pos)):
+                        intsec = patterns.CategoricalPattern(test[i], train_pos[j])
+                        positive_support[i][j] = sum((~(train_pos[:,intsec.mask] == intsec.vals)).sum(axis=1)==0)
+                        positive_counter[i][j] = sum((~(train_neg[:,intsec.mask] == intsec.vals)).sum(axis=1)==0)
+
+            else:
+                train_pos_cat =  train_pos[:,self.categorical]
+                train_pos_num = np.delete(train_pos, self.categorical, axis=1)
+                train_neg_cat =  train_neg[:,self.categorical]
+                train_neg_num = np.delete(train_neg, self.categorical, axis=1)
+
+                for i in range(len(test)):
+                    for j in range(len(train_pos)):
+
+                        intsec_cat = patterns.CategoricalPattern(test[i][self.categorical], train_pos_cat[j])
+                        intsec_num = patterns.IntervalPattern(np.delete(test[i], self.categorical), train_pos_num[j])
+
+                        positive_support[i][j] = sum(((~((intsec_num.low <= train_pos_num) * (train_pos_num <= intsec_num.high))).sum(axis=1) == 0) * 
+                                                     ((~(train_pos_cat[:,intsec_cat.mask] == intsec_cat.vals)).sum(axis=1)==0))
+                        positive_counter[i][j] = sum(((~((intsec_num.low <= train_neg_num) * (train_neg_num <= intsec_num.high))).sum(axis=1) == 0) * 
+                                                     ((~(train_neg_cat[:,intsec_cat.mask] == intsec_cat.vals)).sum(axis=1)==0))
+
+            self.support.append(np.array((positive_support, positive_counter)))
+
+    def predict(self, test):
+        '''
+        Predicts the class labels for the given test objects
+ 
+        Parameters
+        ----------
+        test : list, numpy.ndarray
+            Test objects description (binarized)
+        '''
+        if not self.support:
+            self.compute_support(test)
+
+        if self.method == "standard":
+            self.predictions = decision_functions.alpha_weak(self.support, self.classes, 
+                                                             self.class_lengths, self.alpha)
+        elif self.method == "standard-support":
+            self.predictions = decision_functions.alpha_weak_support(self.support, self.classes, 
+                                                                     self.class_lengths, self.alpha)
+        elif self.method == "ratio-support":
+            self.predictions = decision_functions.ratio_support(self.support, self.classes, 
+                                                                self.class_lengths, self.alpha)

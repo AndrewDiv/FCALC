@@ -158,9 +158,20 @@ class PatternClassifier(FcaClassifier):
         Name of classification method
     alpha : float
         Hyperparameter of the method
+    kde_bandwidth : float
+        Bandwidth parameter for density estimator
+    kde_kernel : str
+        Kernel parameter for density estimator
+    kde_leaf_size : int
+        leaf_size parameter for density estimator
+    kde_classwise : bool
+        Whether to estimate overall data density or classwise
+    scale_density : bool
+        Whether to scale the density inside each class or not
     '''
     def __init__(self, context, labels, support=None, categorical=None, method="standard", alpha=0.,
-                 kde_bandwidth=1.0, kde_kernel='gaussian', kde_leaf_size=40, kde_classwise=False):
+                 kde_bandwidth=1.0, kde_kernel='gaussian', kde_leaf_size=40, kde_classwise=False,
+                 scale_density = True):
         '''
         Initializes PatternBinaryClassifier object
  
@@ -173,11 +184,21 @@ class PatternClassifier(FcaClassifier):
         support : None, numpy.ndarray
             Precomputed support or None
         categorical : list
-            list of indixes of columns with categorical features
+            List of indixes of columns with categorical features
         method : str
             Name of classification method
         alpha : float
             Hyperparameter of the method
+        kde_bandwidth : float
+            Bandwidth parameter for density estimator
+        kde_kernel : str
+            Kernel parameter for density estimator
+        kde_leaf_size : int
+            leaf_size parameter for density estimator
+        kde_classwise : bool
+            Whether to estimate overall data density or classwise
+        scale_density : bool
+            Whether to scale the density inside each class or not
         '''      
 
         super().__init__(context, labels, support)
@@ -193,6 +214,7 @@ class PatternClassifier(FcaClassifier):
         self.kde_kernel = kde_kernel
         self.kde_leaf_size = kde_leaf_size
         self.kde_classwise = kde_classwise
+        self.scale_density = scale_density
         self.density = []
 
     def estimate_density(self):
@@ -213,7 +235,6 @@ class PatternClassifier(FcaClassifier):
                                 leaf_size=self.kde_leaf_size).fit(self.context)
             for c in self.classes:
                 self.density.append(np.exp(kde.score_samples(self.context[self.labels == c])))
-            #self.density = np.exp(kde.score_samples(self.context))
 
     def compute_support(self, test):
         '''
@@ -293,9 +314,13 @@ class PatternClassifier(FcaClassifier):
         elif self.method == "density-based":
             if not self.density:
                 self.estimate_density()
-            
-            scaled_density = list(map(lambda x: (x-x.min())/(x.max()-x.min()) if (x.min()!=x.max()) else x, self.density)) # (self.density-self.density.min()) / (self.density.max()-self.density.min())
-            
-            self.predictions = decision_functions.alpha_weak_density(self.support, self.classes, 
+            if self.scale_density:
+                scaled_density = list(map(lambda x: (x-x.min())/(x.max()-x.min()) if (x.min()!=x.max()) else x, self.density)) # (self.density-self.density.min()) / (self.density.max()-self.density.min())
+
+                self.predictions = decision_functions.alpha_weak_density(self.support, self.classes, 
                                                                      self.class_lengths, scaled_density,
                                                                      self.alpha)
+            else:
+                self.predictions = decision_functions.alpha_weak_density(self.support, self.classes, 
+                                                                         self.class_lengths, self.density,
+                                                                         self.alpha)

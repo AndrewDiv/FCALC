@@ -3,6 +3,7 @@ from . import decision_functions
 import numpy as np
 from sklearn.neighbors import KernelDensity
 from math import ceil
+from numbers import Integral, Real
 
 class FcaClassifier:
     '''
@@ -270,15 +271,25 @@ class PatternClassifier(FcaClassifier):
                 positive_support = np.zeros(shape=(len(test), self.num_iters))
                 positive_counter = np.zeros(shape=(len(test), self.num_iters)) 
 
-                samp_size_pos = ceil(self.subsample_size * train_pos.shape[0])
-                train_pos_sampled = np.zeros(shape=(self.num_iters,
+                rng = np.random.default_rng(seed=42)
+
+                if isinstance(self.subsample_size, Integral):
+                    train_pos_sampled = np.zeros(shape=(self.num_iters,
+                                                        self.subsample_size,
+                                                        self.context.shape[1]))
+                    for j in range(self.num_iters):
+                        train_pos_sampled[j] = rng.choice(train_pos, size=self.subsample_size,
+                                                          replace=False, shuffle=True)
+                elif isinstance(self.subsample_size, Real):
+                    samp_size_pos = ceil(self.subsample_size * train_pos.shape[0])
+                    train_pos_sampled = np.zeros(shape=(self.num_iters,
                                                     samp_size_pos,
                                                     self.context.shape[1]))
-                rng = np.random.default_rng(seed=42)
-                for j in range(self.num_iters):
-                    train_pos_sampled[j] = rng.choice(train_pos, size=samp_size_pos,
-                                                      replace=False, shuffle=False)
-                #print(train_pos_sampled.shape)
+                    for j in range(self.num_iters):
+                        train_pos_sampled[j] = rng.choice(train_pos, size=samp_size_pos,
+                                                          replace=False, shuffle=False)
+                else:
+                    raise TypeError(f'Subsample size should be of type int or float, not {type(self.subsample_size)}')
                 
                 if len(self.categorical) == 0:
                     for i in range(len(test)):

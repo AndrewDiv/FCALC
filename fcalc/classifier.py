@@ -178,7 +178,7 @@ class PatternClassifier(FcaClassifier):
         Whether to scale the density inside each class or not
     '''
     def __init__(self, context, labels, support=None, categorical=None, method="standard", alpha=0.,
-                 randomize=False, num_iters=10, subsample_size=1e-2,
+                 randomize=False, seed=42, num_iters=10, subsample_size=1e-2,
                  kde_bandwidth=1.0, kde_kernel='gaussian', kde_leaf_size=40, kde_classwise=False,
                  scale_density = True):
         '''
@@ -199,7 +199,9 @@ class PatternClassifier(FcaClassifier):
         alpha : float
             Hyperparameter of the method
         randomize : bool
-            Whether use randomiztion or not
+            Whether use randomization or not
+        seed : int
+            Seed for the randomization
         num_iters : int
             Number of subsamples to drow
         subsample_size : float
@@ -226,6 +228,7 @@ class PatternClassifier(FcaClassifier):
         else: 
             self.categorical = categorical
         self.randomize = randomize
+        self.seed = seed
         self.num_iters = num_iters
         self.subsample_size = subsample_size
         self.kde_bandwidth = kde_bandwidth
@@ -271,7 +274,7 @@ class PatternClassifier(FcaClassifier):
                 positive_support = np.zeros(shape=(len(test), self.num_iters))
                 positive_counter = np.zeros(shape=(len(test), self.num_iters)) 
 
-                rng = np.random.default_rng(seed=42)
+                rng = np.random.default_rng(seed=self.seed)
 
                 if isinstance(self.subsample_size, Integral):
                     train_pos_sampled = np.zeros(shape=(self.num_iters,
@@ -294,8 +297,6 @@ class PatternClassifier(FcaClassifier):
                 if len(self.categorical) == 0:
                     for i in range(len(test)):
                         for j in range(len(train_pos_sampled)):
-                            
-                            #print(np.min(train_pos_sampled[j], axis=0).shape)
                             
                             low = np.minimum(test[i], np.min(train_pos_sampled[j], axis=0))
                             high = np.maximum(test[i], np.max(train_pos_sampled[j], axis=0))

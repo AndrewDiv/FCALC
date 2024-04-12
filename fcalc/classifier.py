@@ -2,6 +2,8 @@ from . import patterns
 from . import decision_functions 
 import numpy as np
 from sklearn.neighbors import KernelDensity
+from math import ceil
+from numbers import Integral, Real
 
 class FcaClassifier:
     '''
@@ -158,9 +160,27 @@ class PatternClassifier(FcaClassifier):
         Name of classification method
     alpha : float
         Hyperparameter of the method
+    randomize : bool
+        Whether use randomiztion or not
+    num_iters : int
+        Number of subsamples to drow
+    subsample_size : float
+        Size of single subsample
+    kde_bandwidth : float
+        Bandwidth parameter for density estimator
+    kde_kernel : str
+        Kernel parameter for density estimator
+    kde_leaf_size : int
+        leaf_size parameter for density estimator
+    kde_classwise : bool
+        Whether to estimate overall data density or classwise
+    scale_density : bool
+        Whether to scale the density inside each class or not
     '''
     def __init__(self, context, labels, support=None, categorical=None, method="standard", alpha=0.,
-                 kde_bandwidth=1.0, kde_kernel='gaussian', kde_leaf_size=40, kde_classwise=False):
+                 randomize=False, seed=42, num_iters=10, subsample_size=1e-2,
+                 kde_bandwidth=1.0, kde_kernel='gaussian', kde_leaf_size=40, kde_classwise=False,
+                 scale_density = True):
         '''
         Initializes PatternBinaryClassifier object
  
@@ -173,11 +193,29 @@ class PatternClassifier(FcaClassifier):
         support : None, numpy.ndarray
             Precomputed support or None
         categorical : list
-            list of indixes of columns with categorical features
+            List of indixes of columns with categorical features
         method : str
             Name of classification method
         alpha : float
             Hyperparameter of the method
+        randomize : bool
+            Whether use randomization or not
+        seed : int
+            Seed for the randomization
+        num_iters : int
+            Number of subsamples to drow
+        subsample_size : float
+            Size of single subsample
+        kde_bandwidth : float
+            Bandwidth parameter for density estimator
+        kde_kernel : str
+            Kernel parameter for density estimator
+        kde_leaf_size : int
+            leaf_size parameter for density estimator
+        kde_classwise : bool
+            Whether to estimate overall data density or classwise
+        scale_density : bool
+            Whether to scale the density inside each class or not
         '''      
 
         super().__init__(context, labels, support)
@@ -189,10 +227,15 @@ class PatternClassifier(FcaClassifier):
             self.categorical = []
         else: 
             self.categorical = categorical
+        self.randomize = randomize
+        self.seed = seed
+        self.num_iters = num_iters
+        self.subsample_size = subsample_size
         self.kde_bandwidth = kde_bandwidth
         self.kde_kernel = kde_kernel
         self.kde_leaf_size = kde_leaf_size
         self.kde_classwise = kde_classwise
+        self.scale_density = scale_density
         self.density = []
 
     def estimate_density(self):
@@ -213,7 +256,6 @@ class PatternClassifier(FcaClassifier):
                                 leaf_size=self.kde_leaf_size).fit(self.context)
             for c in self.classes:
                 self.density.append(np.exp(kde.score_samples(self.context[self.labels == c])))
-            #self.density = np.exp(kde.score_samples(self.context))
 
     def compute_support(self, test):
         '''
@@ -224,50 +266,115 @@ class PatternClassifier(FcaClassifier):
         test : list, numpy.ndarray
             Test objects description
         '''
+        if self.randomize:
+            for c in self.classes:
+                train_pos = self.context[self.labels == c]
+                train_neg = self.context[self.labels != c]
 
-        for c in self.classes:
-            train_pos = self.context[self.labels == c]
-            train_neg = self.context[self.labels != c]
+                positive_support = np.zeros(shape=(len(test), self.num_iters))
+                positive_counter = np.zeros(shape=(len(test), self.num_iters)) 
 
-            positive_support = np.zeros(shape=(len(test), len(train_pos)))
-            positive_counter = np.zeros(shape=(len(test), len(train_pos))) 
+                rng = np.random.default_rng(seed=self.seed)
 
-            if len(self.categorical) == 0:
-                for i in range(len(test)):
-                    for j in range(len(train_pos)):
-                        # intsec = patterns.IntervalPattern(test[i],train_pos[j])
-                        # positive_support[i][j] = sum((~((intsec.low <= train_pos) * (train_pos <= intsec.high))).sum(axis=1) == 0)
-                        # positive_counter[i][j] = sum((~((intsec.low <= train_neg) * (train_neg <= intsec.high))).sum(axis=1) == 0)
-                        low = np.minimum(test[i],train_pos[j])
-                        high = np.maximum(test[i],train_pos[j])
-                        positive_support[i][j] = ((~((low <= train_pos) & (train_pos <= high))).sum(axis=1) == 0).sum()
-                        positive_counter[i][j] = ((~((low <= train_neg) & (train_neg <= high))).sum(axis=1) == 0).sum()
+                if isinstance(self.subsample_size, Integral):
+                    train_pos_sampled = np.zeros(shape=(self.num_iters,
+                                                        self.subsample_size,
+                                                        self.context.shape[1]))
+                    for j in range(self.num_iters):
+                        train_pos_sampled[j] = rng.choice(train_pos, size=self.subsample_size,
+                                                          replace=False, shuffle=True)
+                elif isinstance(self.subsample_size, Real):
+                    samp_size_pos = ceil(self.subsample_size * train_pos.shape[0])
+                    train_pos_sampled = np.zeros(shape=(self.num_iters,
+                                                    samp_size_pos,
+                                                    self.context.shape[1]))
+                    for j in range(self.num_iters):
+                        train_pos_sampled[j] = rng.choice(train_pos, size=samp_size_pos,
+                                                          replace=False, shuffle=False)
+                else:
+                    raise TypeError(f'Subsample size should be of type int or float, not {type(self.subsample_size)}')
+                
+                if len(self.categorical) == 0:
+                    for i in range(len(test)):
+                        for j in range(len(train_pos_sampled)):
+                            
+                            low = np.minimum(test[i], np.min(train_pos_sampled[j], axis=0))
+                            high = np.maximum(test[i], np.max(train_pos_sampled[j], axis=0))
+                            positive_support[i][j] = ((~((low <= train_pos) & (train_pos <= high))).sum(axis=1) == 0).sum()
+                            positive_counter[i][j] = ((~((low <= train_neg) & (train_neg <= high))).sum(axis=1) == 0).sum()
+                
+                elif len(self.categorical) == self.context.shape[1]:
+                    for i in range(len(test)):
+                        for j in range(len(train_pos_sampled)):
+                            mask = test[i]==train_pos_sampled[j]
+                            vals = test[i][mask]
+                            positive_support[i][j] = sum((~(train_pos[:,mask] == vals)).sum(axis=1)==0)
+                            positive_counter[i][j] = sum((~(train_neg[:,mask] == vals)).sum(axis=1)==0)
 
-            elif len(self.categorical) == test.shape[1]:
-                for i in range(len(test)):
-                    for j in range(len(train_pos)):
-                        intsec = patterns.CategoricalPattern(test[i], train_pos[j])
-                        positive_support[i][j] = sum((~(train_pos[:,intsec.mask] == intsec.vals)).sum(axis=1)==0)
-                        positive_counter[i][j] = sum((~(train_neg[:,intsec.mask] == intsec.vals)).sum(axis=1)==0)
+                else:
+                    train_pos_cat =  train_pos[:,self.categorical]
+                    train_pos_num = np.delete(train_pos, self.categorical, axis=1)
+                    train_neg_cat =  train_neg[:,self.categorical]
+                    train_neg_num = np.delete(train_neg, self.categorical, axis=1)
 
-            else:
-                train_pos_cat =  train_pos[:,self.categorical]
-                train_pos_num = np.delete(train_pos, self.categorical, axis=1)
-                train_neg_cat =  train_neg[:,self.categorical]
-                train_neg_num = np.delete(train_neg, self.categorical, axis=1)
+                    train_pos_cat_sampled =  train_pos_sampled[:,self.categorical]
+                    train_pos_num_sampled = np.delete(train_pos_sampled, self.categorical, axis=1)
 
-                for i in range(len(test)):
-                    for j in range(len(train_pos)):
+                    for i in range(len(test)):
+                        for j in range(len(train_pos_sampled)):
+                            mask = test[i][self.categorical]==train_pos_cat_sampled[j]
+                            vals = test[i][self.categorical][mask]
+                            low = np.minimum(test[i], np.min(train_pos_num_sampled[j], axis=0))
+                            high = np.maximum(test[i], np.max(train_pos_num_sampled[j], axis=0))
 
-                        intsec_cat = patterns.CategoricalPattern(test[i][self.categorical], train_pos_cat[j])
-                        intsec_num = patterns.IntervalPattern(np.delete(test[i], self.categorical), train_pos_num[j])
+                            positive_support[i][j] = sum(((~((low <= train_pos_num) * (train_pos_num <= high))).sum(axis=1) == 0) * 
+                                                         ((~(train_pos_cat[:,mask] == vals)).sum(axis=1)==0))
+                            positive_counter[i][j] = sum(((~((low <= train_neg_num) * (train_neg_num <= high))).sum(axis=1) == 0) * 
+                                                         ((~(train_neg_cat[:,mask] == vals)).sum(axis=1)==0))
 
-                        positive_support[i][j] = sum(((~((intsec_num.low <= train_pos_num) * (train_pos_num <= intsec_num.high))).sum(axis=1) == 0) * 
-                                                     ((~(train_pos_cat[:,intsec_cat.mask] == intsec_cat.vals)).sum(axis=1)==0))
-                        positive_counter[i][j] = sum(((~((intsec_num.low <= train_neg_num) * (train_neg_num <= intsec_num.high))).sum(axis=1) == 0) * 
-                                                     ((~(train_neg_cat[:,intsec_cat.mask] == intsec_cat.vals)).sum(axis=1)==0))
+                self.support.append(np.array((positive_support, positive_counter)))
 
-            self.support.append(np.array((positive_support, positive_counter)))
+        else:
+            for c in self.classes:
+                train_pos = self.context[self.labels == c]
+                train_neg = self.context[self.labels != c]
+
+                positive_support = np.zeros(shape=(len(test), len(train_pos)))
+                positive_counter = np.zeros(shape=(len(test), len(train_pos))) 
+
+                if len(self.categorical) == 0:
+                    for i in range(len(test)):
+                        for j in range(len(train_pos)):
+                            low = np.minimum(test[i],train_pos[j])
+                            high = np.maximum(test[i],train_pos[j])
+                            positive_support[i][j] = ((~((low <= train_pos) & (train_pos <= high))).sum(axis=1) == 0).sum()
+                            positive_counter[i][j] = ((~((low <= train_neg) & (train_neg <= high))).sum(axis=1) == 0).sum()
+
+                elif len(self.categorical) == test.shape[1]:
+                    for i in range(len(test)):
+                        for j in range(len(train_pos)):
+                            intsec = patterns.CategoricalPattern(test[i], train_pos[j])
+                            positive_support[i][j] = sum((~(train_pos[:,intsec.mask] == intsec.vals)).sum(axis=1)==0)
+                            positive_counter[i][j] = sum((~(train_neg[:,intsec.mask] == intsec.vals)).sum(axis=1)==0)
+
+                else:
+                    train_pos_cat =  train_pos[:,self.categorical]
+                    train_pos_num = np.delete(train_pos, self.categorical, axis=1)
+                    train_neg_cat =  train_neg[:,self.categorical]
+                    train_neg_num = np.delete(train_neg, self.categorical, axis=1)
+
+                    for i in range(len(test)):
+                        for j in range(len(train_pos)):
+
+                            intsec_cat = patterns.CategoricalPattern(test[i][self.categorical], train_pos_cat[j])
+                            intsec_num = patterns.IntervalPattern(np.delete(test[i], self.categorical), train_pos_num[j])
+
+                            positive_support[i][j] = sum(((~((intsec_num.low <= train_pos_num) * (train_pos_num <= intsec_num.high))).sum(axis=1) == 0) * 
+                                                         ((~(train_pos_cat[:,intsec_cat.mask] == intsec_cat.vals)).sum(axis=1)==0))
+                            positive_counter[i][j] = sum(((~((intsec_num.low <= train_neg_num) * (train_neg_num <= intsec_num.high))).sum(axis=1) == 0) * 
+                                                         ((~(train_neg_cat[:,intsec_cat.mask] == intsec_cat.vals)).sum(axis=1)==0))
+
+                self.support.append(np.array((positive_support, positive_counter)))
 
     def predict(self, test):
         '''
@@ -283,19 +390,26 @@ class PatternClassifier(FcaClassifier):
 
         if self.method == "standard":
             self.predictions = decision_functions.alpha_weak(self.support, self.classes, 
-                                                             self.class_lengths, self.alpha)
+                                                             self.class_lengths, self.alpha,
+                                                             self.randomize)
         elif self.method == "standard-support":
             self.predictions = decision_functions.alpha_weak_support(self.support, self.classes, 
-                                                                     self.class_lengths, self.alpha)
+                                                                     self.class_lengths, self.alpha,
+                                                                     self.randomize)
         elif self.method == "ratio-support":
             self.predictions = decision_functions.ratio_support(self.support, self.classes, 
-                                                                self.class_lengths, self.alpha)
+                                                                self.class_lengths, self.alpha,
+                                                                self.randomize)
         elif self.method == "density-based":
             if not self.density:
                 self.estimate_density()
-            
-            scaled_density = list(map(lambda x: (x-x.min())/(x.max()-x.min()) if (x.min()!=x.max()) else x, self.density)) # (self.density-self.density.min()) / (self.density.max()-self.density.min())
-            
-            self.predictions = decision_functions.alpha_weak_density(self.support, self.classes, 
-                                                                     self.class_lengths, scaled_density,
-                                                                     self.alpha)
+            if self.scale_density:
+                scaled_density = list(map(lambda x: (x-x.min())/(x.max()-x.min()) if (x.min()!=x.max()) else x, self.density)) # (self.density-self.density.min()) / (self.density.max()-self.density.min())
+
+                self.predictions = decision_functions.alpha_weak_density(self.support, self.classes, 
+                                                                         self.class_lengths, scaled_density,
+                                                                         self.alpha, self.randomize)
+            else:
+                self.predictions = decision_functions.alpha_weak_density(self.support, self.classes, 
+                                                                         self.class_lengths, self.density,
+                                                                         self.alpha, self.randomize)

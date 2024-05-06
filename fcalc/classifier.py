@@ -279,15 +279,17 @@ class PatternClassifier(FcaClassifier):
                 if isinstance(self.subsample_size, Integral):
                     train_pos_sampled = np.zeros(shape=(self.num_iters,
                                                         self.subsample_size,
-                                                        self.context.shape[1]))
+                                                        self.context.shape[1]),
+                                                dtype=self.context.dtype)
                     for j in range(self.num_iters):
                         train_pos_sampled[j] = rng.choice(train_pos, size=self.subsample_size,
                                                           replace=False, shuffle=True)
                 elif isinstance(self.subsample_size, Real):
                     samp_size_pos = ceil(self.subsample_size * train_pos.shape[0])
                     train_pos_sampled = np.zeros(shape=(self.num_iters,
-                                                    samp_size_pos,
-                                                    self.context.shape[1]))
+                                                        samp_size_pos,
+                                                        self.context.shape[1]),
+                                                        dtype=self.context.dtype)
                     for j in range(self.num_iters):
                         train_pos_sampled[j] = rng.choice(train_pos, size=samp_size_pos,
                                                           replace=False, shuffle=False)
@@ -306,7 +308,7 @@ class PatternClassifier(FcaClassifier):
                 elif len(self.categorical) == self.context.shape[1]:
                     for i in range(len(test)):
                         for j in range(len(train_pos_sampled)):
-                            mask = test[i]==train_pos_sampled[j]
+                            mask = (test[i]==train_pos_sampled[j]).all(axis=0)
                             vals = test[i][mask]
                             positive_support[i][j] = sum((~(train_pos[:,mask] == vals)).sum(axis=1)==0)
                             positive_counter[i][j] = sum((~(train_neg[:,mask] == vals)).sum(axis=1)==0)
@@ -317,15 +319,17 @@ class PatternClassifier(FcaClassifier):
                     train_neg_cat =  train_neg[:,self.categorical]
                     train_neg_num = np.delete(train_neg, self.categorical, axis=1)
 
-                    train_pos_cat_sampled =  train_pos_sampled[:,self.categorical]
-                    train_pos_num_sampled = np.delete(train_pos_sampled, self.categorical, axis=1)
+                    train_pos_cat_sampled =  train_pos_sampled[:,:,self.categorical]
+                    train_pos_num_sampled = np.delete(train_pos_sampled, self.categorical, axis=2)
+
+                    numeric_cols = np.delete(np.arange(self.context.shape[1]), self.categorical)
 
                     for i in range(len(test)):
                         for j in range(len(train_pos_sampled)):
-                            mask = test[i][self.categorical]==train_pos_cat_sampled[j]
+                            mask = (test[i][self.categorical]==train_pos_cat_sampled[j]).all(axis=0)
                             vals = test[i][self.categorical][mask]
-                            low = np.minimum(test[i], np.min(train_pos_num_sampled[j], axis=0))
-                            high = np.maximum(test[i], np.max(train_pos_num_sampled[j], axis=0))
+                            low = np.minimum(test[i][numeric_cols], np.min(train_pos_num_sampled[j], axis=0))
+                            high = np.maximum(test[i][numeric_cols], np.max(train_pos_num_sampled[j], axis=0))
 
                             positive_support[i][j] = sum(((~((low <= train_pos_num) * (train_pos_num <= high))).sum(axis=1) == 0) * 
                                                          ((~(train_pos_cat[:,mask] == vals)).sum(axis=1)==0))

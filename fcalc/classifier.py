@@ -237,6 +237,7 @@ class PatternClassifier(FcaClassifier):
         self.kde_classwise = kde_classwise
         self.scale_density = scale_density
         self.density = []
+        self.intersections = []
 
     def estimate_density(self):
         '''
@@ -273,6 +274,8 @@ class PatternClassifier(FcaClassifier):
 
                 positive_support = np.zeros(shape=(len(test), self.num_iters))
                 positive_counter = np.zeros(shape=(len(test), self.num_iters)) 
+                
+                intsecs = [[] for _ in range(len(test))]
 
                 rng = np.random.default_rng(seed=self.seed)
 
@@ -304,6 +307,7 @@ class PatternClassifier(FcaClassifier):
                             high = np.maximum(test[i], np.max(train_pos_sampled[j], axis=0))
                             positive_support[i][j] = ((~((low <= train_pos) & (train_pos <= high))).sum(axis=1) == 0).sum()
                             positive_counter[i][j] = ((~((low <= train_neg) & (train_neg <= high))).sum(axis=1) == 0).sum()
+                            intsecs[i].append({'intent':list(zip(low, high))})
                 
                 elif len(self.categorical) == self.context.shape[1]:
                     for i in range(len(test)):
@@ -312,6 +316,7 @@ class PatternClassifier(FcaClassifier):
                             vals = test[i][mask]
                             positive_support[i][j] = sum((~(train_pos[:,mask] == vals)).sum(axis=1)==0)
                             positive_counter[i][j] = sum((~(train_neg[:,mask] == vals)).sum(axis=1)==0)
+                            intsecs[i].append({'mask': mask, 'values': vals})
 
                 else:
                     train_pos_cat =  train_pos[:,self.categorical]
@@ -335,8 +340,10 @@ class PatternClassifier(FcaClassifier):
                                                          ((~(train_pos_cat[:,mask] == vals)).sum(axis=1)==0))
                             positive_counter[i][j] = sum(((~((low <= train_neg_num) * (train_neg_num <= high))).sum(axis=1) == 0) * 
                                                          ((~(train_neg_cat[:,mask] == vals)).sum(axis=1)==0))
+                            intsecs[i].append({'numerical': list(zip(low, high)), 'categorical': {'mask': mask, 'values': vals}})
 
                 self.support.append(np.array((positive_support, positive_counter)))
+                self.intersections.append(intsecs)
 
         else:
             for c in self.classes:
@@ -346,6 +353,8 @@ class PatternClassifier(FcaClassifier):
                 positive_support = np.zeros(shape=(len(test), len(train_pos)))
                 positive_counter = np.zeros(shape=(len(test), len(train_pos))) 
 
+                intsecs = [[] for _ in range(len(test))]
+
                 if len(self.categorical) == 0:
                     for i in range(len(test)):
                         for j in range(len(train_pos)):
@@ -353,6 +362,7 @@ class PatternClassifier(FcaClassifier):
                             high = np.maximum(test[i],train_pos[j])
                             positive_support[i][j] = ((~((low <= train_pos) & (train_pos <= high))).sum(axis=1) == 0).sum()
                             positive_counter[i][j] = ((~((low <= train_neg) & (train_neg <= high))).sum(axis=1) == 0).sum()
+                            intsecs[i].append({'intent':list(zip(low, high))})
 
                 elif len(self.categorical) == test.shape[1]:
                     for i in range(len(test)):
@@ -360,7 +370,7 @@ class PatternClassifier(FcaClassifier):
                             intsec = patterns.CategoricalPattern(test[i], train_pos[j])
                             positive_support[i][j] = sum((~(train_pos[:,intsec.mask] == intsec.vals)).sum(axis=1)==0)
                             positive_counter[i][j] = sum((~(train_neg[:,intsec.mask] == intsec.vals)).sum(axis=1)==0)
-
+                            intsecs[i].append({'mask': intsec.mask, 'values': intsec.vals})
                 else:
                     train_pos_cat =  train_pos[:,self.categorical]
                     train_pos_num = np.delete(train_pos, self.categorical, axis=1)
@@ -377,8 +387,11 @@ class PatternClassifier(FcaClassifier):
                                                          ((~(train_pos_cat[:,intsec_cat.mask] == intsec_cat.vals)).sum(axis=1)==0))
                             positive_counter[i][j] = sum(((~((intsec_num.low <= train_neg_num) * (train_neg_num <= intsec_num.high))).sum(axis=1) == 0) * 
                                                          ((~(train_neg_cat[:,intsec_cat.mask] == intsec_cat.vals)).sum(axis=1)==0))
+                            intsecs[i].append({'numerical': list(zip(intsec_num.low, intsec_num.high)),
+                                               'categorical': {'mask': intsec_cat.mask, 'values': intsec_cat.vals}})
 
                 self.support.append(np.array((positive_support, positive_counter)))
+                self.intersections.append(intsecs)
 
     def predict(self, test):
         '''

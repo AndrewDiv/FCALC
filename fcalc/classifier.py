@@ -1,7 +1,6 @@
 from . import patterns
 from . import decision_functions 
 import numpy as np
-from sklearn.neighbors import KernelDensity
 from math import ceil
 from numbers import Integral, Real
 
@@ -155,32 +154,22 @@ class PatternClassifier(FcaClassifier):
     support : None, numpy.ndarray
         Precomputed support or None
     categorical : list
-        list of indixes of columns with categorical features
+        list of indices of columns with categorical features
     method : str
         Name of classification method
     alpha : float
         Hyperparameter of the method
     randomize : bool
         Whether use randomiztion or not
+    seed : int
+        Seed for the randomization
     num_iters : int
         Number of subsamples to drow
     subsample_size : float
         Size of single subsample
-    kde_bandwidth : float
-        Bandwidth parameter for density estimator
-    kde_kernel : str
-        Kernel parameter for density estimator
-    kde_leaf_size : int
-        leaf_size parameter for density estimator
-    kde_classwise : bool
-        Whether to estimate overall data density or classwise
-    scale_density : bool
-        Whether to scale the density inside each class or not
     '''
     def __init__(self, context, labels, support=None, categorical=None, method="standard", alpha=0.,
-                 randomize=False, seed=42, num_iters=10, subsample_size=1e-2,
-                 kde_bandwidth=1.0, kde_kernel='gaussian', kde_leaf_size=40, kde_classwise=False,
-                 scale_density = True):
+                 randomize=False, seed=42, num_iters=10, subsample_size=1e-2):
         '''
         Initializes PatternBinaryClassifier object
  
@@ -193,7 +182,7 @@ class PatternClassifier(FcaClassifier):
         support : None, numpy.ndarray
             Precomputed support or None
         categorical : list
-            List of indixes of columns with categorical features
+            List of indices of columns with categorical features
         method : str
             Name of classification method
         alpha : float
@@ -206,16 +195,6 @@ class PatternClassifier(FcaClassifier):
             Number of subsamples to drow
         subsample_size : float
             Size of single subsample
-        kde_bandwidth : float
-            Bandwidth parameter for density estimator
-        kde_kernel : str
-            Kernel parameter for density estimator
-        kde_leaf_size : int
-            leaf_size parameter for density estimator
-        kde_classwise : bool
-            Whether to estimate overall data density or classwise
-        scale_density : bool
-            Whether to scale the density inside each class or not
         '''      
 
         super().__init__(context, labels, support)
@@ -227,36 +206,13 @@ class PatternClassifier(FcaClassifier):
             self.categorical = []
         else: 
             self.categorical = categorical
+        if self.method in ["proximity", "proximity-non-falsified", "proximity-support"] and self.categorical:
+            raise TypeError(f'Method {self.method} can be used with numerical data only')
         self.randomize = randomize
         self.seed = seed
         self.num_iters = num_iters
         self.subsample_size = subsample_size
-        self.kde_bandwidth = kde_bandwidth
-        self.kde_kernel = kde_kernel
-        self.kde_leaf_size = kde_leaf_size
-        self.kde_classwise = kde_classwise
-        self.scale_density = scale_density
-        self.density = []
         self.intersections = []
-
-    def estimate_density(self):
-        '''
-        Calculates probability density for context using 
-        KernelDensity estimator from sklearn library 
-        '''
-        self.density = []
-        if self.kde_classwise:
-            for c in self.classes:
-                kde = KernelDensity(bandwidth=self.kde_bandwidth,
-                                    kernel=self.kde_kernel, 
-                                    leaf_size=self.kde_leaf_size).fit(self.context[self.labels == c])
-                self.density.append(np.exp(kde.score_samples(self.context[self.labels == c])))
-        else:
-            kde = KernelDensity(bandwidth=self.kde_bandwidth,
-                                kernel=self.kde_kernel, 
-                                leaf_size=self.kde_leaf_size).fit(self.context)
-            for c in self.classes:
-                self.density.append(np.exp(kde.score_samples(self.context[self.labels == c])))
 
     def compute_support(self, test):
         '''
@@ -307,7 +263,7 @@ class PatternClassifier(FcaClassifier):
                             high = np.maximum(test[i], np.max(train_pos_sampled[j], axis=0))
                             positive_support[i][j] = ((~((low <= train_pos) & (train_pos <= high))).sum(axis=1) == 0).sum()
                             positive_counter[i][j] = ((~((low <= train_neg) & (train_neg <= high))).sum(axis=1) == 0).sum()
-                            intsecs[i].append({'intent':list(zip(low, high))})
+                            intsecs[i].append({'intent':np.vstack((low, high)).T})
                 
                 elif len(self.categorical) == self.context.shape[1]:
                     for i in range(len(test)):
@@ -362,7 +318,7 @@ class PatternClassifier(FcaClassifier):
                             high = np.maximum(test[i],train_pos[j])
                             positive_support[i][j] = ((~((low <= train_pos) & (train_pos <= high))).sum(axis=1) == 0).sum()
                             positive_counter[i][j] = ((~((low <= train_neg) & (train_neg <= high))).sum(axis=1) == 0).sum()
-                            intsecs[i].append({'intent':list(zip(low, high))})
+                            intsecs[i].append({'intent':np.vstack((low, high)).T})
 
                 elif len(self.categorical) == test.shape[1]:
                     for i in range(len(test)):
@@ -393,6 +349,19 @@ class PatternClassifier(FcaClassifier):
                 self.support.append(np.array((positive_support, positive_counter)))
                 self.intersections.append(intsecs)
 
+    def compute_proximity(self, test):
+        self.proximity = []
+        for ind in range(len(self.classes)):
+            train_pos = self.context[self.labels == self.classes[ind]]
+            pos_dists = np.zeros(shape=(len(test),len(self.intersections[ind][0])))
+            for i in range(len(test)):
+                for j in range(len(self.intersections[ind][i])):
+                    pos_mask = (~((self.intersections[ind][i][j]['intent'][:,0] <= train_pos) & 
+                                  (train_pos <= self.intersections[ind][i][j]['intent'][:,1]))).sum(axis=1) == 0
+                    pos_dists[i][j] = 1-np.linalg.norm(train_pos[pos_mask]-test[i], axis=1).mean() / np.sqrt(self.context.shape[1])
+            self.proximity.append(pos_dists)
+            
+
     def predict(self, test):
         '''
         Predicts the class labels for the given test objects
@@ -406,27 +375,27 @@ class PatternClassifier(FcaClassifier):
             self.compute_support(test)
 
         if self.method == "standard":
-            self.predictions = decision_functions.alpha_weak(self.support, self.classes, 
-                                                             self.class_lengths, self.alpha,
-                                                             self.randomize)
+            self.predictions = decision_functions.non_falsified(self.support, self.classes, 
+                                                                self.class_lengths, self.alpha,
+                                                                self.randomize)
         elif self.method == "standard-support":
-            self.predictions = decision_functions.alpha_weak_support(self.support, self.classes, 
-                                                                     self.class_lengths, self.alpha,
-                                                                     self.randomize)
+            self.predictions = decision_functions.non_falsified_support(self.support, self.classes, 
+                                                                        self.class_lengths, self.alpha,
+                                                                        self.randomize)
         elif self.method == "ratio-support":
             self.predictions = decision_functions.ratio_support(self.support, self.classes, 
                                                                 self.class_lengths, self.alpha,
                                                                 self.randomize)
-        elif self.method == "density-based":
-            if not self.density:
-                self.estimate_density()
-            if self.scale_density:
-                scaled_density = list(map(lambda x: (x-x.min())/(x.max()-x.min()) if (x.min()!=x.max()) else x, self.density)) # (self.density-self.density.min()) / (self.density.max()-self.density.min())
-
-                self.predictions = decision_functions.alpha_weak_density(self.support, self.classes, 
-                                                                         self.class_lengths, scaled_density,
-                                                                         self.alpha, self.randomize)
-            else:
-                self.predictions = decision_functions.alpha_weak_density(self.support, self.classes, 
-                                                                         self.class_lengths, self.density,
-                                                                         self.alpha, self.randomize)
+        elif self.method == "proximity":
+            self.compute_proximity(test)
+            self.predictions = decision_functions.proximity_based(self.proximity, self.classes)
+        elif self.method == "proximity-non-falsified":
+            self.compute_proximity(test)
+            self.predictions = decision_functions.proximity_non_falsified(self.proximity, self.support,
+                                                                          self.classes, self.class_lengths,
+                                                                          self.alpha)
+        elif self.method == "proximity-support":
+            self.compute_proximity(test)
+            self.predictions = decision_functions.proximity_support(self.proximity, self.support,
+                                                                    self.classes, self.class_lengths,
+                                                                    self.alpha)

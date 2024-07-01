@@ -41,7 +41,7 @@ $$y = \underset{c}{\text{argmax}}\left(\dfrac{ \sum\limits_{x_i\in X_c}p_i}{|X_c
 $$y = \underset{c}{\text{argmax}}\left(\dfrac{ \sum\limits_{x_i\in X_c}p_i\cdot [b_i = 0]}{|X_c|}\right)$$
 * Proximity-support (```method = "proximity-support"```)
 $$y = \underset{c}{\text{argmax}}\left(\dfrac{ \sum\limits_{x_i\in X_c}a_i \cdot p_i \cdot [b_i = 0]}{|X_c|}\right)$$
-Here $a_i$ is support in target class, $b_i$ - support in non-target class, and p_i is proximity of intersection $x \sqcap x_i$
+Here $a_i$ is support in target class, $b_i$ - support in non-target class, and $p_i$ is proximity of intersection $x \sqcap x_i$
 
 ## Example
 Let's start with importing the libraries

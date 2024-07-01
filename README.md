@@ -29,18 +29,18 @@ Also there is a randomized version of the algorithm. The randomization is define
 
 ### General
 * Non-falsified (```method = "standard"```)
-$$ y = \underset{c}{\argmax}\left(\dfrac{\sum\limits_{x_i \in X_{c}}[b_i = 0]}{|X_{c}|}\right) $$
+$$y = \underset{c}{\argmax}\left(\dfrac{\sum\limits_{x_i \in X_{c}}[b_i = 0]}{|X_{c}|}\right)$$
 * Non-falsified support (```method = "standard-support"```)
-$$ y = \underset{c}{\argmax}\left(\dfrac{\sum\limits_{x_i \in X_{c}}a_i \cdot [b_i = 0]}{|X_{c}|^2}\right) $$
+$$y = \underset{c}{\argmax}\left(\dfrac{\sum\limits_{x_i \in X_{c}}a_i \cdot [b_i = 0]}{|X_{c}|^2}\right)$$
 * Ratio-support (```method = "ratio-support"```)
-$$ y = \underset{c}{\argmax} \left(\dfrac{|X_{train} \setminus X_c|\cdot \sum\limits_{x_i \in X_{c}} a_i \cdot [\frac{a_i}{|X_c|} \geq \gamma \frac{b_i}{|X_{train} \setminus X_{c}|}]}{|X_{c}|\cdot \sum\limits_{x_i \in X_c} b_i\cdot[\frac{a_i}{|X_c|} \geq \gamma \frac{b_i}{|X_{train} \setminus X_c|}]}  \right) $$
+$$y = \underset{c}{\argmax} \left(\dfrac{|X_{train} \setminus X_c|\cdot \sum\limits_{x_i \in X_{c}} a_i \cdot [\frac{a_i}{|X_c|} \geq \gamma \frac{b_i}{|X_{train} \setminus X_{c}|}]}{|X_{c}|\cdot \sum\limits_{x_i \in X_c} b_i\cdot[\frac{a_i}{|X_c|} \geq \gamma \frac{b_i}{|X_{train} \setminus X_c|}]}  \right)$$
 ### Numeric-only data
 * Proximity (```method = "proximity"```)
-$$ y = \argmax_{c}\left(\dfrac{ \sum\limits_{x_i\in X_c}p_i}{|X_c|}\right) $$
+$$y = \argmax_{c}\left(\dfrac{ \sum\limits_{x_i\in X_c}p_i}{|X_c|}\right)$$
 * Proximity non-falsified (```method = "proximity-non-falsified"```)
-$$ y = \argmax_{c}\left(\dfrac{ \sum\limits_{x_i\in X_c}p_i\cdot [b_i = 0]}{|X_c|}\right) $$
+$$y = \argmax_{c}\left(\dfrac{ \sum\limits_{x_i\in X_c}p_i\cdot [b_i = 0]}{|X_c|}\right)$$
 * Proximity-support (```method = "proximity-support"```)
-$$ y = \argmax_{c}\left(\dfrac{ \sum\limits_{x_i\in X_c}a_i \cdot p_i \cdot [b_i = 0]}{|X_c|}\right) $$
+$$y = \argmax_{c}\left(\dfrac{ \sum\limits_{x_i\in X_c}a_i \cdot p_i \cdot [b_i = 0]}{|X_c|}\right)$$
 Here $a_i$ is support in target class, $b_i$ - support in non-target class, and p_i is proximity of intersection $x \sqcap x_i$
 
 ## Example
